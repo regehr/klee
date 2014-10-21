@@ -223,6 +223,8 @@ protected:
   /// emitted, so it may be used.
   BindingMap bindings;
 
+  std::vector<BindingMap> orderedBindings;
+
   /// Output stream to write to
   llvm::raw_ostream *o;
 
@@ -278,10 +280,15 @@ protected:
   /// \param abbrMode the abbreviation mode to use for this expression
   void printExpression(const ref<Expr> &e, SMTLIB_SORT expectedSort);
 
-  /// Scan Expression recursively for Arrays in expressions. Found arrays are
-  /// added to
-  /// the usedArrays vector.
+  /// Scan expression recursively for Arrays in expressions. Found arrays are
+  /// added to the usedArrays vector. Found expressions seen more than once
+  /// are added to the bindings map.
   void scan(const ref<Expr> &e);
+
+  /// Scan bindings for expression intra-dependencies. The result is written
+  /// to the orderedBindings map that is later used for abbreviated expression
+  /// printing.
+  void scanBindingDeps();
 
   /* Rules of recursion for "Special Expression handlers" and
    *printSortArgsExpr()

@@ -78,6 +78,7 @@ void ExprSMTLIBPrinter::setQuery(const Query &q) {
 
 void ExprSMTLIBPrinter::reset() {
   bindings.clear();
+  orderedBindings.clear();
   seenExprs.clear();
   usedArrays.clear();
   haveConstantArray = false;
@@ -466,6 +467,9 @@ void ExprSMTLIBPrinter::scanAll() {
 
   // Scan the query too
   scan(query->expr);
+
+  // Scan bindings for expression intra-dependencies
+  scanBindingDeps();
 }
 
 void ExprSMTLIBPrinter::generateOutput() {
@@ -654,6 +658,77 @@ void ExprSMTLIBPrinter::scan(const ref<Expr> &e) {
   }
 }
 
+void ExprSMTLIBPrinter::scanBindingDeps() {
+  if (!bindings.size())
+    return;
+  // Mutual dependency storage
+  typedef std::map<const ref<Expr>, std::set<ref<Expr>> > ExprDepMap;
+  ExprDepMap depMapFw, depMapBw;
+  // Working queue holding expressions with no dependencies
+  // that can be printed at the current dependency level
+  std::vector<ref<Expr>> queue;
+  // Iterate over bindings and collect dependencies
+  for (BindingMap::const_iterator it = bindings.begin();
+       it != bindings.end(); ++it) {
+    std::vector<ref<Expr>> chQueue = { it->first };
+    // Non-recursive expression parsing
+    while (chQueue.size()) {
+      Expr *ep = chQueue.back().get();
+      chQueue.pop_back();
+      for (unsigned i = 0; i < ep->getNumKids(); ++i) {
+        ref<Expr> e = ep->getKid(i);
+        if (isa<ConstantExpr>(e))
+          continue;
+        // Found dependency
+        if (bindings.count(e)) {
+          depMapFw[it->first].insert(e);
+          depMapBw[e].insert(it->first);
+        } else {
+          chQueue.push_back(e);
+        }
+      }
+    }
+    // Look for expressions with zero deps
+    if (!depMapFw.count(it->first))
+      queue.push_back(it->first);
+  }
+  assert(queue.size() && "there must be expressions with no dependencies");
+  // Unroll the dependency tree starting with zero-dep expressions
+  unsigned counter = 0;
+  while (queue.size()) {
+    BindingMap levelExprs;
+    std::vector<ref<Expr>> tmp(queue);
+    queue.clear();
+    for (std::vector<ref<Expr>>::iterator it = tmp.begin();
+         it != tmp.end(); ++it) {
+      // Save to the level expression bindings
+      levelExprs.insert(std::make_pair(*it, counter++));
+      // Who is dependent on me?
+      ExprDepMap::iterator usesIt = depMapBw.find(*it);
+      if (usesIt != depMapBw.end()) {
+        for (std::set<ref<Expr>>::iterator exprIt = usesIt->second.begin();
+             exprIt != usesIt->second.end(); ) {
+          // Erase dependency
+          ExprDepMap::iterator subExprIt = depMapFw.find(*exprIt);
+          assert(subExprIt != depMapFw.end());
+          assert(subExprIt->second.count(*it));
+          subExprIt->second.erase(*it);
+          // If the expression *exprIt does not have any
+          // dependencies anymore, add it to the queue
+          if (!subExprIt->second.size()) {
+            queue.push_back(*exprIt);
+            usesIt->second.erase(exprIt++);
+          } else {
+            ++exprIt;
+          }
+        }
+      }
+    }
+    // Store level bindings
+    orderedBindings.push_back(levelExprs);
+  }
+}
+
 void ExprSMTLIBPrinter::scanUpdates(const UpdateNode *un) {
   while (un != NULL) {
     scan(un->index);
@@ -701,43 +776,60 @@ void ExprSMTLIBPrinter::printAssert(const ref<Expr> &e) {
   p->pushIndent();
   printSeperator();
 
-  if (abbrMode == ABBR_LET && bindings.size() != 0) {
+  if (abbrMode == ABBR_LET && orderedBindings.size() != 0) {
     // Only print let expression if we have bindings to use.
     *p << "(let";
     p->pushIndent();
     printSeperator();
-    *p << "( ";
+    *p << "(";
     p->pushIndent();
 
-    // Disable abbreviations so none are used here.
-    abbrMode = ABBR_NONE;
-
+    // Clear original bindings, we'll be using orderedBindings
+    // to created chained let expressions
+    bindings.clear();
     // Print each binding
-    for (BindingMap::const_iterator i = bindings.begin(); i != bindings.end();
-         ++i) {
-      printSeperator();
-      *p << "(?B" << i->second << " ";
-      p->pushIndent();
+    for (unsigned i = 0; i < orderedBindings.size(); ++i) {
+      BindingMap levelBindings = orderedBindings[i];
+      for (BindingMap::const_iterator j = levelBindings.begin();
+           j != levelBindings.end(); ++j) {
+        printSeperator();
+        *p << "(?B" << j->second << " ";
+        p->pushIndent();
 
-      // We can abbreviate SORT_BOOL or SORT_BITVECTOR in let expressions
-      printExpression(i->first, getSort(i->first));
+        // We can abbreviate SORT_BOOL or SORT_BITVECTOR in let expressions
+        printExpression(j->first, getSort(j->first));
 
-      p->popIndent();
-      printSeperator();
+        p->popIndent();
+        printSeperator();
+        *p << ")";
+      }
       *p << ")";
+
+      // Add chained let expressions (if any)
+      if (i < orderedBindings.size()-1) {
+        printSeperator();
+        *p << "(let";
+        p->pushIndent();
+        printSeperator();
+        *p << "(";
+        p->pushIndent();
+      }
+      // Insert current level bindings so that they can be used
+      // in the next let level during expression printing
+      bindings.insert(levelBindings.begin(), levelBindings.end());
     }
 
-    // Re-enable printing abbreviations.
-    abbrMode = ABBR_LET;
-
-    p->popIndent();
-    printSeperator();
-    *p << ")";
+    p->pushIndent();
     printSeperator();
 
     printExpression(e, SORT_BOOL);
 
-    *p << ")";
+    for (unsigned i = 0; i < orderedBindings.size(); ++i) {
+      p->popIndent();
+      printSeperator();
+      *p << ")";
+      p->popIndent();
+    }
   } else {
     printExpression(e, SORT_BOOL);
   }
