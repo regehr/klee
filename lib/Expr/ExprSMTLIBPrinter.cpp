@@ -55,6 +55,7 @@ ExprSMTLIBPrinter::ExprSMTLIBPrinter()
       smtlibBoolOptions(), arraysToCallGetValueOn(NULL) {
   setConstantDisplayMode(ExprSMTLIBOptions::argConstantDisplayMode);
   setAbbreviationMode(ExprSMTLIBOptions::abbreviationMode);
+  useQuantifiers = false;
 }
 
 ExprSMTLIBPrinter::~ExprSMTLIBPrinter() {
@@ -499,6 +500,9 @@ void ExprSMTLIBPrinter::printSetLogic() {
   case QF_AUFBV:
     *o << "QF_AUFBV";
     break;
+  case AUFBV:
+    *o << "AUFBV";
+    break;
   }
   *o << " )\n";
 }
@@ -635,6 +639,10 @@ void ExprSMTLIBPrinter::scan(const ref<Expr> &e) {
 
     if (const ReadExpr *re = dyn_cast<ReadExpr>(e)) {
 
+      // Add all ReadExpr to bindings
+      if (useQuantifiers)
+        bindings.insert(std::make_pair(e, bindings.size()+1));
+
       // Attempt to insert array and if array wasn't present before do more things
       if (usedArrays.insert(re->updates.root).second) {
 
@@ -740,7 +748,7 @@ void ExprSMTLIBPrinter::scanUpdates(const UpdateNode *un) {
 void ExprSMTLIBPrinter::printExit() { *o << "(exit)\n"; }
 
 bool ExprSMTLIBPrinter::setLogic(SMTLIBv2Logic l) {
-  if (l > QF_AUFBV)
+  if (l > AUFBV)
     return false;
 
   logicToUse = l;
@@ -771,22 +779,60 @@ void ExprSMTLIBPrinter::printOptions() {
 }
 
 void ExprSMTLIBPrinter::printAssert(const ref<Expr> &e) {
+  // Clear original bindings, we'll be using orderedBindings
+  // to created chained let expressions
+  bindings.clear();
+
   p->pushIndent();
   *p << "(assert";
   p->pushIndent();
   printSeperator();
 
+  // Print forall bindings for ReadExpr only except for constant
+  if (useQuantifiers) {
+    *p << "(forall";
+    p->pushIndent();
+    printSeperator();
+    *p << "(";
+    p->pushIndent();
+    // All ReadExpr must be in the first level of dependencies
+    assert(orderedBindings.size() > 0);
+    for (BindingMap::iterator it = orderedBindings[0].begin();
+         it != orderedBindings[0].end(); ) {
+      if (const ReadExpr *re = dyn_cast<ReadExpr>(it->first)) {
+        if (re->updates.root->name != "constant") {
+          printSeperator();
+          *p << "(?B" << it->second << " ";
+          p->pushIndent();
+          *p << "(_ BitVec " << re->getWidth() << ")";
+          p->popIndent();
+          printSeperator();
+          *p << ")";
+          // Insert into bindings for printing
+          // in subsequent let bindings
+          bindings.insert(*it);
+          orderedBindings[0].erase(it++);
+        } else {
+          ++it;
+        }
+      }
+    }
+    p->popIndent();
+    printSeperator();
+    *p << ")";
+    p->popIndent();
+    printSeperator();
+  }
+
   if (abbrMode == ABBR_LET && orderedBindings.size() != 0) {
     // Only print let expression if we have bindings to use.
     *p << "(let";
+
     p->pushIndent();
     printSeperator();
     *p << "(";
     p->pushIndent();
 
-    // Clear original bindings, we'll be using orderedBindings
-    // to created chained let expressions
-    bindings.clear();
     // Print each binding
     for (unsigned i = 0; i < orderedBindings.size(); ++i) {
       BindingMap levelBindings = orderedBindings[i];
@@ -832,6 +878,11 @@ void ExprSMTLIBPrinter::printAssert(const ref<Expr> &e) {
     }
   } else {
     printExpression(e, SORT_BOOL);
+  }
+
+  if (useQuantifiers) {
+    printSeperator();
+    *p << ")";
   }
 
   p->popIndent();
