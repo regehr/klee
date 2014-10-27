@@ -83,7 +83,7 @@ public:
     QF_ABV,   ///< Logic using Theory of Arrays and Theory of Bitvectors
     QF_AUFBV, ///< Logic using Theory of Arrays and Theory of Bitvectors and has
               ///uninterpreted functions
-    AUFBV     ///< quantifiers
+    AUFBV     ///< and quantifiers
   };
 
   /// Different SMTLIBv2 options that have a boolean value that can be set
@@ -209,8 +209,6 @@ public:
 
   /// \return True if human readable mode is switched on
   bool isHumanReadable();
-
-  bool useQuantifiers;
 
 protected:
   /// Contains the arrays found during scans

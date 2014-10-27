@@ -55,7 +55,6 @@ ExprSMTLIBPrinter::ExprSMTLIBPrinter()
       smtlibBoolOptions(), arraysToCallGetValueOn(NULL) {
   setConstantDisplayMode(ExprSMTLIBOptions::argConstantDisplayMode);
   setAbbreviationMode(ExprSMTLIBOptions::abbreviationMode);
-  useQuantifiers = false;
 }
 
 ExprSMTLIBPrinter::~ExprSMTLIBPrinter() {
@@ -640,7 +639,7 @@ void ExprSMTLIBPrinter::scan(const ref<Expr> &e) {
     if (const ReadExpr *re = dyn_cast<ReadExpr>(e)) {
 
       // Add all ReadExpr to bindings
-      if (useQuantifiers)
+      if (logicToUse == AUFBV)
         bindings.insert(std::make_pair(e, bindings.size()+1));
 
       // Attempt to insert array and if array wasn't present before do more things
@@ -789,7 +788,7 @@ void ExprSMTLIBPrinter::printAssert(const ref<Expr> &e) {
   printSeperator();
 
   // Print forall bindings for ReadExpr only except for constant
-  if (useQuantifiers) {
+  if (logicToUse == AUFBV) {
     *p << "(forall";
     p->pushIndent();
     printSeperator();
@@ -880,7 +879,7 @@ void ExprSMTLIBPrinter::printAssert(const ref<Expr> &e) {
     printExpression(e, SORT_BOOL);
   }
 
-  if (useQuantifiers) {
+  if (logicToUse == AUFBV) {
     printSeperator();
     *p << ")";
   }
