@@ -788,14 +788,13 @@ void ExprSMTLIBPrinter::printAssert(const ref<Expr> &e) {
   printSeperator();
 
   // Print forall bindings for ReadExpr only except for constant
-  if (logicToUse == AUFBV) {
+  if (logicToUse == AUFBV && orderedBindings.size() != 0) {
     *p << "(forall";
     p->pushIndent();
     printSeperator();
     *p << "(";
     p->pushIndent();
     // All ReadExpr must be in the first level of dependencies
-    assert(orderedBindings.size() > 0);
     for (BindingMap::iterator it = orderedBindings[0].begin();
          it != orderedBindings[0].end(); ) {
       if (const ReadExpr *re = dyn_cast<ReadExpr>(it->first)) {
@@ -879,7 +878,7 @@ void ExprSMTLIBPrinter::printAssert(const ref<Expr> &e) {
     printExpression(e, SORT_BOOL);
   }
 
-  if (logicToUse == AUFBV) {
+  if (logicToUse == AUFBV && orderedBindings.size() != 0) {
     printSeperator();
     *p << ")";
   }
