@@ -80,10 +80,11 @@ public:
   /// Different SMTLIBv2 logics supported by this class
   /// \sa setLogic()
   enum SMTLIBv2Logic {
+    QF_BV,    ///< Logic using Theory of Bitvectors (quantifier-free)
+    BV,       ///< Logic using Theory of Bitvectors
     QF_ABV,   ///< Logic using Theory of Arrays and Theory of Bitvectors
-    QF_AUFBV, ///< Logic using Theory of Arrays and Theory of Bitvectors and has
+    QF_AUFBV  ///< Logic using Theory of Arrays and Theory of Bitvectors and has
               ///uninterpreted functions
-    AUFBV     ///< and quantifiers
   };
 
   /// Different SMTLIBv2 options that have a boolean value that can be set
@@ -252,6 +253,9 @@ protected:
 
   // Print SMTLIBv2 logic to use e.g. (set-logic QF_ABV)
   void printSetLogic();
+
+  // Print SMTLIBv2 bitvector declarations
+  void printBvDeclarations();
 
   // Print SMTLIBv2 assertions for constant arrays
   void printArrayDeclarations();
