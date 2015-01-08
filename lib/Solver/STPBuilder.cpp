@@ -116,6 +116,14 @@ STPBuilder::~STPBuilder() {
   return res;
 }
 
+::VCExpr STPBuilder::buildBV(const char *name, unsigned indexWidth, unsigned valueWidth) {
+  // XXX don't rebuild if this stuff cons's
+  ::Type t = vc_bvType(vc, valueWidth);
+  ::VCExpr res = vc_varExpr(vc, const_cast<char*>(name), t);
+  vc_DeleteExpr(t);
+  return res;
+}
+
 ExprHandle STPBuilder::getTempVar(Expr::Width w) {
   switch (w) {
   default: assert(0 && "invalid type");
@@ -459,6 +467,29 @@ ExprHandle STPBuilder::constructSDivByConstant(ExprHandle expr_n, unsigned width
   return(array_expr); 
 }
 
+::VCExpr STPBuilder::getInitialBV(const Array *root) {
+
+  assert(root);
+  ::VCExpr bv_expr;
+  bool hashed = _arr_hash.lookupArrayExpr(root, bv_expr);
+
+  if (!hashed) {
+    // STP uniques arrays by name, so we make sure the name is unique by
+    // including the address.
+    char buf[32];
+    unsigned const addrlen = sprintf(buf, "_%p", (const void*)root) + 1; // +1 for null-termination
+    unsigned const space = (root->name.length() > 32 - addrlen)?(32 - addrlen):root->name.length();
+    memmove(buf + space, buf, addrlen); // moving the address part to the end
+    memcpy(buf, root->name.c_str(), space); // filling out the name part
+
+    bv_expr = buildBV(buf, root->getDomain(), root->getRange());
+
+    _arr_hash.hashArrayExpr(root, bv_expr);
+  }
+
+  return(bv_expr);
+}
+
 ExprHandle STPBuilder::getInitialRead(const Array *root, unsigned index) {
   return vc_readExpr(vc, getInitialArray(root), bvConst32(32, index));
 }
@@ -555,16 +586,21 @@ ExprHandle STPBuilder::constructActual(ref<Expr> e, int *width_out) {
     assert(re && re->updates.root);
     *width_out = re->updates.root->getRange();
     // Cast a BV of size 1 to a Bool
-    if (*width_out == 1) {
-      return vc_bvBoolExtract_One(vc,
-                                  vc_readExpr(vc,
-                                              getArrayForUpdate(re->updates.root, re->updates.head),
-                                              construct(re->index, 0)),
-                                  0);
-    } else
-      return vc_readExpr(vc,
-                         getArrayForUpdate(re->updates.root, re->updates.head),
-                         construct(re->index, 0));
+    //if (*width_out == 1) {
+    //  return vc_bvBoolExtract_One(vc,
+    //                              vc_readExpr(vc,
+    //                                          getArrayForUpdate(re->updates.root, re->updates.head),
+    //                                          construct(re->index, 0)),
+    //                              0);
+    //} else
+    //  return vc_readExpr(vc,
+    //                     getArrayForUpdate(re->updates.root, re->updates.head),
+    //                     construct(re->index, 0));
+    // Cast a BV of size 1 to a Bool
+    if (*width_out == 1)
+      return vc_bvBoolExtract_One(vc, getInitialBV(re->updates.root), 0);
+    else
+      return getInitialBV(re->updates.root);
   }
     
   case Expr::Select: {

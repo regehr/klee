@@ -106,6 +106,7 @@ private:
   ExprHandle constructSDivByConstant(ExprHandle expr_n, unsigned width, uint64_t d);
 
   ::VCExpr getInitialArray(const Array *os);
+  ::VCExpr getInitialBV(const Array *os);
   ::VCExpr getArrayForUpdate(const Array *root, const UpdateNode *un);
 
   ExprHandle constructActual(ref<Expr> e, int *width_out);
@@ -113,6 +114,7 @@ private:
   
   ::VCExpr buildVar(const char *name, unsigned width);
   ::VCExpr buildArray(const char *name, unsigned indexWidth, unsigned valueWidth);
+  ::VCExpr buildBV(const char *name, unsigned indexWidth, unsigned valueWidth);
  
 public:
   STPBuilder(::VC _vc, bool _optimizeDivides=true);
