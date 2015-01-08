@@ -554,9 +554,17 @@ ExprHandle STPBuilder::constructActual(ref<Expr> e, int *width_out) {
     ReadExpr *re = cast<ReadExpr>(e);
     assert(re && re->updates.root);
     *width_out = re->updates.root->getRange();
-    return vc_readExpr(vc,
-                       getArrayForUpdate(re->updates.root, re->updates.head),
-                       construct(re->index, 0));
+    // Cast a BV of size 1 to a Bool
+    if (*width_out == 1) {
+      return vc_bvBoolExtract_One(vc,
+                                  vc_readExpr(vc,
+                                              getArrayForUpdate(re->updates.root, re->updates.head),
+                                              construct(re->index, 0)),
+                                  0);
+    } else
+      return vc_readExpr(vc,
+                         getArrayForUpdate(re->updates.root, re->updates.head),
+                         construct(re->index, 0));
   }
     
   case Expr::Select: {
