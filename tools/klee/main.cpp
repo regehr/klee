@@ -575,6 +575,11 @@ void KleeHandler::getOutFiles(std::string path,
 }
 
 std::string KleeHandler::getRunTimeLibraryPath(const char *argv0) {
+  // allow specifying the path to the runtime library
+  const char *env = getenv("KLEE_RUNTIME_LIBRARY_PATH");
+  if (env)
+    return std::string(env);
+
   // Take any function from the execution binary but not main (as not allowed by
   // C++ standard)
   void *MainExecAddr = (void *)(intptr_t)getRunTimeLibraryPath;
@@ -760,6 +765,10 @@ static const char *modelledExternals[] = {
   "_Znwj", 
   "_Znam", 
   "_Znwm", 
+  "__ubsan_handle_add_overflow",
+  "__ubsan_handle_sub_overflow",
+  "__ubsan_handle_mul_overflow",
+  "__ubsan_handle_divrem_overflow",
 };
 // Symbols we aren't going to warn about
 static const char *dontCareExternals[] = {
