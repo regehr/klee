@@ -113,7 +113,7 @@ ObjectState::ObjectState(const MemoryObject *mo)
   if (!UseConstantArrays) {
     // FIXME: Leaked.
     static unsigned id = 0;
-    const Array *array = new Array("tmp_arr" + llvm::utostr(++id), size);
+    const Array *array = Array::CreateArray("tmp_arr" + llvm::utostr(++id), size);
     updates = UpdateList(array, 0);
   }
   memset(concreteStore, 0, size);
@@ -222,9 +222,9 @@ const UpdateList &ObjectState::getUpdates() const {
     // Start a new update list.
     // FIXME: Leaked.
     static unsigned id = 0;
-    const Array *array = new Array("const_arr" + llvm::utostr(++id), size,
-                                   &Contents[0],
-                                   &Contents[0] + Contents.size());
+    const Array *array = Array::CreateArray("const_arr" + llvm::utostr(++id), size,
+					    &Contents[0],
+					    &Contents[0] + Contents.size());
     updates = UpdateList(array, 0);
 
     // Apply the remaining (non-constant) writes.
@@ -468,7 +468,7 @@ ref<Expr> ObjectState::read(ref<Expr> offset, Expr::Width width) const {
 
   // Otherwise, follow the slow general case.
   unsigned NumBytes = width / 8;
-  assert(width == NumBytes * 8 && "Invalid write size!");
+  assert(width == NumBytes * 8 && "Invalid read size!");
   ref<Expr> Res(0);
   for (unsigned i = 0; i != NumBytes; ++i) {
     unsigned idx = Context::get().isLittleEndian() ? i : (NumBytes - i - 1);
@@ -488,7 +488,7 @@ ref<Expr> ObjectState::read(unsigned offset, Expr::Width width) const {
 
   // Otherwise, follow the slow general case.
   unsigned NumBytes = width / 8;
-  assert(width == NumBytes * 8 && "Invalid write size!");
+  assert(width == NumBytes * 8 && "Invalid width for read size!");
   ref<Expr> Res(0);
   for (unsigned i = 0; i != NumBytes; ++i) {
     unsigned idx = Context::get().isLittleEndian() ? i : (NumBytes - i - 1);

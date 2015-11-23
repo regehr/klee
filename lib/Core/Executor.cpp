@@ -140,10 +140,6 @@ namespace {
 		   cl::desc("Dump test cases for all active states on exit (default=on)"));
  
   cl::opt<bool>
-  NoPreferCex("no-prefer-cex",
-              cl::init(false));
- 
-  cl::opt<bool>
   RandomizeFork("randomize-fork",
                 cl::init(false),
 		cl::desc("Randomly swap the true and false states on a fork (default=off)"));
@@ -2592,9 +2588,7 @@ void Executor::run(ExecutionState &initialState) {
             unsigned numStates = states.size();
             unsigned toKill = std::max(1U, numStates - numStates*MaxMemory/mbs);
 
-            if (MaxMemoryInhibit)
-              klee_warning("killing %d states (over memory cap)",
-                           toKill);
+            klee_warning("killing %d states (over memory cap)", toKill);
 
             std::vector<ExecutionState*> arr(states.begin(), states.end());
             for (unsigned i=0,N=arr.size(); N && i<toKill; ++i,--N) {
@@ -2924,8 +2918,8 @@ ref<Expr> Executor::replaceReadWithSymbolic(ExecutionState &state,
   // and return it.
   
   static unsigned id;
-  const Array *array = new Array("rrws_arr" + llvm::utostr(++id), 
-                                 Expr::getMinBytesForWidth(e->getWidth()));
+  const Array *array = Array::CreateArray("rrws_arr" + llvm::utostr(++id),
+					  Expr::getMinBytesForWidth(e->getWidth()));
   ref<Expr> res = Expr::createTempRead(array, e->getWidth());
   ref<Expr> eq = NotOptimizedExpr::create(EqExpr::create(e, res));
   llvm::errs() << "Making symbolic: " << eq << "\n";
@@ -3263,7 +3257,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
     while (!state.arrayNames.insert(uniqueName).second) {
       uniqueName = name + "_" + llvm::utostr(++id);
     }
-    const Array *array = new Array(uniqueName, mo->size);
+    const Array *array = Array::CreateArray(uniqueName, mo->size);
     bindObjectInState(state, mo, false, array);
     state.addSymbolic(mo, array);
     
@@ -3484,20 +3478,33 @@ bool Executor::getSymbolicSolution(const ExecutionState &state,
   solver->setTimeout(coreSolverTimeout);
 
   ExecutionState tmp(state);
-  if (!NoPreferCex) {
-    for (unsigned i = 0; i != state.symbolics.size(); ++i) {
-      const MemoryObject *mo = state.symbolics[i].first;
-      std::vector< ref<Expr> >::const_iterator pi = 
-        mo->cexPreferences.begin(), pie = mo->cexPreferences.end();
-      for (; pi != pie; ++pi) {
-        bool mustBeTrue;
-        bool success = solver->mustBeTrue(tmp, Expr::createIsZero(*pi), 
-                                          mustBeTrue);
-        if (!success) break;
-        if (!mustBeTrue) tmp.addConstraint(*pi);
-      }
-      if (pi!=pie) break;
+
+  // Go through each byte in every test case and attempt to restrict
+  // it to the constraints contained in cexPreferences.  (Note:
+  // usually this means trying to make it an ASCII character (0-127)
+  // and therefore human readable. It is also possible to customize
+  // the preferred constraints.  See test/Features/PreferCex.c for
+  // an example) While this process can be very expensive, it can
+  // also make understanding individual test cases much easier.
+  for (unsigned i = 0; i != state.symbolics.size(); ++i) {
+    const MemoryObject *mo = state.symbolics[i].first;
+    std::vector< ref<Expr> >::const_iterator pi = 
+      mo->cexPreferences.begin(), pie = mo->cexPreferences.end();
+    for (; pi != pie; ++pi) {
+      bool mustBeTrue;
+      // Attempt to bound byte to constraints held in cexPreferences
+      bool success = solver->mustBeTrue(tmp, Expr::createIsZero(*pi), 
+					mustBeTrue);
+      // If it isn't possible to constrain this particular byte in the desired
+      // way (normally this would mean that the byte can't be constrained to
+      // be between 0 and 127 without making the entire constraint list UNSAT)
+      // then just continue on to the next byte.
+      if (!success) break;
+      // If the particular constraint operated on in this iteration through
+      // the loop isn't implied then add it to the list of constraints.
+      if (!mustBeTrue) tmp.addConstraint(*pi);
     }
+    if (pi!=pie) break;
   }
 
   std::vector< std::vector<unsigned char> > values;
