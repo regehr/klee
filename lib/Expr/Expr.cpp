@@ -13,6 +13,7 @@
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)
 #include "llvm/ADT/Hashing.h"
 #endif
+#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 // FIXME: We shouldn't need this once fast constant support moves into
@@ -348,7 +349,10 @@ void ConstantExpr::toMemory(void *address) {
 }
 
 void ConstantExpr::toString(std::string &Res, unsigned radix) const {
-  Res = value.toString(radix, false);
+  SmallString<64> S;
+  value.toStringUnsigned(S);
+  std::string Str(S);
+  Res = Str;
 }
 
 ref<ConstantExpr> ConstantExpr::Concat(const ref<ConstantExpr> &RHS) {
