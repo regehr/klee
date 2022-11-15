@@ -347,8 +347,14 @@ void ConstantExpr::toMemory(void *address) {
   }
 }
 
+#include <iostream>
+
 void ConstantExpr::toString(std::string &Res, unsigned radix) const {
-  Res = value.toString(radix, false);
+  //llvm::outs() << "'" << value << "'" << "\n";
+  //Res = "";
+  llvm::raw_string_ostream os(Res);
+  value.print(os, false);
+  //std::cout << "'" << Res << "'" << std::endl << std::endl;
 }
 
 ref<ConstantExpr> ConstantExpr::Concat(const ref<ConstantExpr> &RHS) {
