@@ -11,6 +11,7 @@
 #include "klee/Config/Version.h"
 
 #include "llvm/ADT/Hashing.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 // FIXME: We shouldn't need this once fast constant support moves into
@@ -328,7 +329,7 @@ ref<Expr> ConstantExpr::fromMemory(void *address, Width width) {
   // FIXME: what about machines without x87 support?
   default:
     return ConstantExpr::alloc(llvm::APInt(width,
-      (width+llvm::integerPartWidth-1)/llvm::integerPartWidth,
+      (width+llvm::APFloatBase::integerPartWidth-1)/llvm::APFloatBase::integerPartWidth,
       (const uint64_t*)address));
   }
 }
@@ -349,7 +350,9 @@ void ConstantExpr::toMemory(void *address) {
 }
 
 void ConstantExpr::toString(std::string &Res, unsigned radix) const {
-  Res = value.toString(radix, false);
+  llvm::SmallString<8> Str;
+  value.toString(Str, radix, false);
+  Res = (std::string)Str;
 }
 
 ref<ConstantExpr> ConstantExpr::Concat(const ref<ConstantExpr> &RHS) {

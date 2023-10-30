@@ -498,6 +498,7 @@ public:
 private:
   unsigned hashValue;
 
+public:
   // FIXME: Make =delete when we switch to C++11
   Array(const Array& array);
 
@@ -518,7 +519,6 @@ private:
         const ref<ConstantExpr> *constantValuesEnd = 0,
         Expr::Width _domain = Expr::Int32, Expr::Width _range = Expr::Int8);
 
-public:
   bool isSymbolicArray() const { return constantValues.empty(); }
   bool isConstantArray() const { return !isSymbolicArray(); }
 
